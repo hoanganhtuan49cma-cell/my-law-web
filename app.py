@@ -1,84 +1,59 @@
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-import google.generativeai as genai
 
-# --- CẤU HÌNH TRANG ---
-st.set_page_config(page_title="Hệ thống Pháp luật Cá nhân", layout="wide")
+# Cấu hình trang
+st.set_page_config(page_title="Sổ tay Pháp luật Cá nhân", layout="wide")
 
-# --- CẤU HÌNH AI (Thay bằng API Key của bạn) ---
-genai.configure(api_key="CHÈN_API_KEY_CỦA_BẠN_VÀO_ĐÂY")
-model = genai.GenerativeModel('gemini-1.5-flash')
-
-# --- KẾT NỐI DỮ LIỆU (Google Sheets) ---
-# Link Google Sheet của bạn (Phải để ở chế độ "Anyone with the link can view")
-url = "LINK_GOOGLE_SHEET_CỦA_BẠN"
-
+# Kết nối Google Sheets
+# Bạn sẽ dán link sheet vào phần Secrets của Streamlit
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    return conn.read(spreadsheet=url, usecols=[0, 1, 2, 3, 4])
+    return conn.read(ttl="0") # ttl="0" để luôn tải dữ liệu mới nhất
 
-# Khởi tạo hoặc tải dữ liệu
 df = load_data()
 
-st.title("⚖️ Trợ lý Văn bản Pháp luật Vĩnh viễn")
+st.title("⚖️ Sổ tay Quản lý Văn bản Pháp luật")
 
-# --- PHẦN 1: AI PHÂN TÍCH NHANH ---
-st.subheader("🤖 Trợ lý AI Phân tích")
-with st.expander("Dán nội dung văn bản để AI đọc giúp bạn"):
-    raw_text = st.text_area("Nội dung (Phần hiệu lực thi hành):", height=150)
-    if st.button("Phân tích bằng AI"):
-        prompt = f"Phân tích văn bản sau và trả về các thông tin: Số hiệu, Tên, Tình trạng hiệu lực, Văn bản thay thế, Ghi chú. Nội dung: {raw_text}"
-        response = model.generate_content(prompt)
-        st.write(response.text)
+# Chia 2 cột: Nhập liệu và Tra cứu
+col_in, col_out = st.columns([1, 2])
 
-st.divider()
-
-# --- PHẦN 2: QUẢN LÝ DANH MỤC ---
-col_form, col_view = st.columns([1, 2])
-
-with col_form:
-    st.header("Cập nhật mới")
+with col_in:
+    st.header("Thêm văn bản mới")
     with st.form("add_form", clear_on_submit=True):
-        s_hieu = st.text_input("Số hiệu")
+        s_hieu = st.text_input("Số hiệu văn bản")
         ten = st.text_input("Tên văn bản")
         t_trang = st.selectbox("Tình trạng", ["Còn hiệu lực", "Hết hiệu lực một phần", "Hết hiệu lực toàn bộ"])
-        thay_the = st.text_input("Văn bản liên quan")
-        ghi_chu = st.text_area("Ghi chú")
+        thay_the = st.text_input("Sửa đổi bởi/Thay thế bởi")
+        ghi_chu = st.text_area("Ghi chú quan trọng")
         
-        submit = st.form_submit_button("Lưu dữ liệu")
-        
-        if submit:
-            # Tạo dòng mới
+        if st.form_submit_button("Lưu văn bản"):
             new_row = pd.DataFrame([[s_hieu, ten, t_trang, thay_the, ghi_chu]], 
                                     columns=["Số hiệu", "Tên", "Tình trạng", "Thay thế bởi", "Ghi chú"])
             updated_df = pd.concat([df, new_row], ignore_index=True)
             
-            # Cập nhật trực tiếp lên Google Sheets
-            conn.update(spreadsheet=url, data=updated_df)
-            st.success("Đã cập nhật lên Google Sheets thành công!")
-            st.cache_data.clear() # Xóa cache để load lại dữ liệu mới
+            # Ghi đè lại file Google Sheets
+            conn.update(data=updated_df)
+            st.success("Đã lưu thành công!")
+            st.rerun()
 
-with col_view:
-    st.header("Tra cứu văn bản")
-    search = st.text_input("Tìm kiếm số hiệu hoặc tên...")
+with col_out:
+    st.header("Danh mục tra cứu")
+    search = st.text_input("🔍 Tìm theo số hiệu hoặc tên...")
     
-    display_df = df.copy()
+    view_df = df.copy()
     if search:
-        display_df = display_df[display_df['Số hiệu'].str.contains(search, case=False) | 
-                                display_df['Tên'].str.contains(search, case=False)]
+        view_df = view_df[view_df['Số hiệu'].str.contains(search, case=False) | 
+                          view_df['Tên'].str.contains(search, case=False)]
     
-    # Định dạng bảng màu sắc
-    def style_status(row):
-        color = 'background-color: #d4edda' if row['Tình trạng'] == 'Còn hiệu lực' else \
-                'background-color: #fff3cd' if row['Tình trạng'] == 'Hết hiệu lực một phần' else \
-                'background-color: #f8d7da'
-        return [color] * len(row)
-
-    st.dataframe(display_df.style.apply(style_status, axis=1), use_container_width=True)
-
-# Nút làm mới dữ liệu
-if st.button("🔄 Làm mới dữ liệu từ Sheets"):
-    st.cache_data.clear()
-    st.rerun()
+    # Hiển thị bảng
+    st.dataframe(view_df, use_container_width=True, hide_index=True)
+    
+    # Hiển thị chi tiết từng mục
+    for _, row in view_df.iterrows():
+        color = "🟢" if row['Tình trạng'] == "Còn hiệu lực" else "🟠" if row['Tình trạng'] == "Hết hiệu lực một phần" else "🔴"
+        with st.expander(f"{color} {row['Số hiệu']} - {row['Tên']}"):
+            st.write(f"**Tình trạng:** {row['Tình trạng']}")
+            st.write(f"**Liên quan:** {row['Thay thế bởi']}")
+            st.info(f"**Ghi chú:** {row['Ghi chú']}")
