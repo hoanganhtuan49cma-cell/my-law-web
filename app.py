@@ -10,7 +10,7 @@ st.set_page_config(page_title="Sổ tay Pháp luật Cá nhân", layout="wide")
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def load_data():
-    return conn.read(ttl="0") # ttl="0" để luôn tải dữ liệu mới nhất
+    return conn.read(spreadsheet="https://docs.google.com/spreadsheets/d/1X6ur2pHKLu0Kwk4ZAKTm5ZZPcVk3BopYq4KxN98AgBo/edit?usp=sharing",ttl="0") # ttl="0" để luôn tải dữ liệu mới nhất
 
 df = load_data()
 
